@@ -1,21 +1,15 @@
-use std::collections::{hash_set::IntoIter, HashSet};
-
-use mappings::{MermaidClass, MermaidEnum, Relationship};
-use syn::Item;
-
 mod mappings;
 
-pub struct MermaidResult {
-    pub classes: Vec<MermaidClass>,
-    pub enums: Vec<MermaidEnum>,
-    pub relationships: HashSet<Relationship>,
-}
+use std::collections::{hash_set::IntoIter, HashSet};
+use syn::Item;
+
+use mappings::{MermaidClass, MermaidResult, MermaidType, Relationship};
 
 pub fn create_class_diagram_string(input: String) -> String {
     let MermaidResult {
         classes,
         enums,
-        relationships: associations,
+        relationships,
     } = parse_src_into_mermaid(&input);
 
     let classes_str: String = classes
@@ -23,11 +17,12 @@ pub fn create_class_diagram_string(input: String) -> String {
         .map(String::from)
         .collect::<Vec<String>>()
         .join("\n");
-    let associations_str: String = associations
+    let mut relationships_vec: Vec<String> = relationships
         .into_iter()
         .map(String::from)
-        .collect::<Vec<String>>()
-        .join("\n");
+        .collect::<Vec<String>>();
+    relationships_vec.sort();
+    let relationships_str = relationships_vec.join("\n");
     let enums_str = enums
         .into_iter()
         .map(String::from)
@@ -36,7 +31,7 @@ pub fn create_class_diagram_string(input: String) -> String {
 
     format!(
         "```mermaid\nclassDiagram\ndirection LR\n{}\n{}\n{}\n```",
-        classes_str, enums_str, associations_str
+        classes_str, enums_str, relationships_str
     )
 }
 
@@ -49,15 +44,9 @@ fn parse_src_into_mermaid(src: &str) -> MermaidResult {
         .items
         .into_iter()
         .for_each(|item| match item {
-            Item::Const(_) => (),
             Item::Enum(e) => enums.push(e.into()),
-            Item::ExternCrate(_) => todo!(),
-            Item::Fn(_) => todo!(),
-            Item::ForeignMod(_) => todo!(),
             Item::Impl(_) => (),
-            Item::Macro(_) => (),
             Item::Mod(_) => (),
-            Item::Static(_) => todo!(),
             Item::Struct(item_struct) => {
                 let mermaid_class = Into::<MermaidClass>::into(item_struct.clone());
                 classes.push(mermaid_class.clone());
@@ -67,12 +56,7 @@ fn parse_src_into_mermaid(src: &str) -> MermaidResult {
                 });
             }
             Item::Trait(_) => todo!(),
-            Item::TraitAlias(_) => todo!(),
-            Item::Type(_) => todo!(),
-            Item::Union(_) => todo!(),
-            Item::Use(_) => todo!(),
-            Item::Verbatim(_) => todo!(),
-            _ => todo!(),
+            _ => (),
         });
 
     MermaidResult {
@@ -82,17 +66,24 @@ fn parse_src_into_mermaid(src: &str) -> MermaidResult {
     }
 }
 
+fn get_identifier_from_generic_type(ty: &MermaidType) -> String {
+    match &ty.generics {
+        Some(generics) => get_identifier_from_generic_type(generics.first().unwrap()),
+        None => ty.identifier.clone(),
+    }
+}
+
 fn get_relationships_from_class(class: MermaidClass) -> IntoIter<Relationship> {
     let mut relationships = HashSet::new();
     class.fields.iter().for_each(|field| {
         let to = match &field.ty.generics {
-            Some(generics) => generics.first().unwrap(),
-            None => &field.ty.identifier,
+            Some(_) => get_identifier_from_generic_type(&field.ty),
+            None => field.ty.identifier.clone(),
         };
 
-        if !is_primitive(to) && field.ty.reference && field.name.is_some() {
+        if !is_primitive(&to) && field.ty.reference && field.name.is_some() {
             relationships.insert(Relationship::Association(class.name.clone(), to.clone()));
-        } else if !is_primitive(to) && field.name.is_some() {
+        } else if !is_primitive(&to) && field.name.is_some() {
             relationships.insert(Relationship::Composition(class.name.clone(), to.clone()));
         }
     });
@@ -151,7 +142,8 @@ fn get_relationships_from_class(class: MermaidClass) -> IntoIter<Relationship> {
 
 fn is_primitive(ty: &str) -> bool {
     let primitive_identifiers = [
-        "String", "&str", "i32", "u32", "i64", "u64", "i16", "u16", "i8", "u8", "usize", "isize",
+        "String", "&str", "f32", "f64", "i32", "u32", "i64", "u64", "i16", "u16", "i8", "u8",
+        "usize", "isize", "bool",
     ]; // TODO can this be dynamic?
     primitive_identifiers.contains(&ty)
 }

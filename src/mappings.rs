@@ -1,21 +1,39 @@
+use std::collections::HashSet;
+
 mod rs;
+
+#[allow(dead_code)] // TODO check why this flags as a warning...
+pub struct MermaidResult {
+    pub classes: Vec<MermaidClass>,
+    pub enums: Vec<MermaidEnum>,
+    pub relationships: HashSet<Relationship>,
+}
 
 #[derive(Debug, Clone)]
 pub struct MermaidType {
     pub reference: bool,
     pub identifier: String,
-    pub generics: Option<Vec<String>>,
+    pub generics: Option<Vec<MermaidType>>,
 }
 impl From<MermaidType> for String {
     fn from(value: MermaidType) -> Self {
+        dbg!(&value);
         match value.generics {
             Some(generics) => format!(
                 "{}{}~{}~",
                 if value.reference { "&" } else { "" },
                 value.identifier,
-                generics.join(",")
+                generics
+                    .into_iter()
+                    .map(String::from)
+                    .collect::<Vec<String>>()
+                    .join(",")
             ),
-            None => value.identifier,
+            None => format!(
+                "{}{}",
+                if value.reference { "&" } else { "" },
+                value.identifier
+            ),
         }
     }
 }
@@ -33,7 +51,9 @@ impl From<MermaidClass> for String {
             .into_iter()
             .map(String::from)
             .for_each(|field_string| {
+                s += "    ";
                 s += &field_string;
+                s += "\n";
             });
         s + "}"
     }
@@ -63,13 +83,13 @@ impl From<MermaidField> for String {
     fn from(value: MermaidField) -> Self {
         match value.name {
             Some(name) => format!(
-                "    {} {}: {}\n",
+                "{} {}: {}",
                 Into::<&str>::into(value.visibility),
                 name,
                 String::from(value.ty)
             ),
             None => format!(
-                "    {} {}\n",
+                "{} {}",
                 Into::<&str>::into(value.visibility),
                 String::from(value.ty)
             ),
