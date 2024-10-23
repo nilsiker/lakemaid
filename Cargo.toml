@@ -6,4 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-syn = { version = "2.0.39", features = ["full", "extra-traits"] }
+clap = { version = "4.5.20", features = ["derive"] }
+serde = { version = "1.0.213", features = ["derive"] }
+serde_json = "1.0.132"
+syn = { version = "2.0.83", features = ["full", "extra-traits"] }
+thiserror = "1.0.65"
